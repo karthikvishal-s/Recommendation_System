@@ -10,7 +10,7 @@ ratings = pd.read_csv(
     names=["userId", "movieId", "rating", "timestamp"]
 )
 
-# Load movie titles from u.item
+# Load movie titles
 movies = pd.read_csv(
     "./u.item",
     sep="|",
@@ -26,11 +26,11 @@ movies = movies[["movieId", "title"]]
 # Merge ratings and movies
 data = pd.merge(ratings, movies, on="movieId")
 
-# Create User-Movie matrix
+# Create user-item matrix
 pivot_table = data.pivot_table(index='userId', columns='title', values='rating')
 pivot_table.fillna(0, inplace=True)
 
-# Compute item-item cosine similarity
+# Compute cosine similarity
 item_similarity = cosine_similarity(pivot_table.T)
 item_similarity_df = pd.DataFrame(item_similarity, index=pivot_table.columns, columns=pivot_table.columns)
 
@@ -41,24 +41,42 @@ def find_closest_match(movie_input):
     return match if score >= 60 else None
 
 # Recommendation function
-def recommend(movie_name, num=5):
+def recommend(movie_name, num=10):
     if movie_name not in item_similarity_df:
-        return "Movie not found in dataset."
+        return pd.DataFrame(columns=["Recommended Movie", "Similarity Score"])
+    
     sim_scores = item_similarity_df[movie_name].sort_values(ascending=False)[1:num+1]
-    return sim_scores
+    
+    result_df = pd.DataFrame({
+        "Recommended Movie": sim_scores.index,
+        "Similarity Score": sim_scores.values*10
+    })
+    
+    result_df["Similarity Score"] = result_df["Similarity Score"].apply(lambda x: round(x, 3))
+    
+    return result_df
 
 # Streamlit UI
+st.set_page_config(page_title="Movie Recommender", layout="centered")
 st.title("🎬 Movie Recommender System")
-st.markdown("Type a movie name to get similar movie recommendations.")
+st.markdown("Type a movie name to get **similar movie recommendations** based on user ratings.")
 
-user_input = st.text_input("Enter a movie name:")
+user_input = st.text_input("🎥 Enter a movie name:")
 
 if user_input:
     matched_movie = find_closest_match(user_input)
+    
     if matched_movie:
         st.success(f"Showing results for: **{matched_movie}**")
-        results = recommend(matched_movie, 5)
-        st.write("Top 5 similar movies:")
-        st.table(results)
+        results_df = recommend(matched_movie, 10)
+
+        if not results_df.empty:
+            st.markdown("### 🔍 Top 10 Similar Movies")
+            st.dataframe(results_df, use_container_width=True)
+        else:
+            st.warning("No recommendations available.")
     else:
         st.error("❌ Sorry, no close match found in the dataset.")
+
+
+st.write("The data is sourced from MovieLens's datasets.The contents are limited up until 2024")
